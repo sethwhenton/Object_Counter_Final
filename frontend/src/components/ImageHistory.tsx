@@ -2,16 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Calendar, Eye, Image as ImageIcon, TrendingUp, Clock, Users, RefreshCw, MousePointer, Trash2, Square, CheckSquare, Layers, X } from 'lucide-react';
 import api, { ApiObjectType } from '../services/api';
 import { Button } from './ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Separator } from './ui/separator';
 import { ResultDetailsDialog } from './ResultDetailsDialog';
 import { BulkDeleteDialog } from './BulkDeleteDialog';
-import { F1ScoreDisplay } from './F1ScoreDisplay';
 
 interface HistoryResult {
-  id: number;
+  id: string;
   predicted_count: number;
   corrected_count: number | null;
   object_type: string;
@@ -49,14 +48,14 @@ export function ImageHistory({ onBack }: HistoryProps) {
   
   // Result details dialog state
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
-  const [selectedResultId, setSelectedResultId] = useState<number | null>(null);
+  const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
   
   // Refresh message for user feedback
   const [refreshMessage, setRefreshMessage] = useState<string>('');
   
   // Bulk selection state
   const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
 
   // Load object types for filtering
@@ -135,13 +134,13 @@ export function ImageHistory({ onBack }: HistoryProps) {
   };
   
   // Handle clicking on a result item
-  const handleResultClick = (resultId: number) => {
+  const handleResultClick = (resultId: string) => {
     setSelectedResultId(resultId);
     setShowDetailsDialog(true);
   };
   
   // Handle deleting a result from the detailed dialog
-  const handleResultDelete = async (resultId: number) => {
+  const handleResultDelete = async (resultId: string) => {
     try {
       console.log(`🗑️ Handling result deletion for ID: ${resultId}`);
       
@@ -167,7 +166,7 @@ export function ImageHistory({ onBack }: HistoryProps) {
   };
   
   // Handle updating a result from the detailed dialog
-  const handleResultUpdate = async (resultId: number) => {
+  const handleResultUpdate = async (_resultId: string) => {
     try {
       // Refresh data to get updated information
       await refreshData();
@@ -180,7 +179,7 @@ export function ImageHistory({ onBack }: HistoryProps) {
   };
   
   // Handle quick delete from history list
-  const handleQuickDelete = async (e: React.MouseEvent, resultId: number) => {
+  const handleQuickDelete = async (e: React.MouseEvent, resultId: string) => {
     e.stopPropagation(); // Prevent triggering the card click
     
     if (!window.confirm('Are you sure you want to delete this result?')) {
@@ -227,7 +226,7 @@ export function ImageHistory({ onBack }: HistoryProps) {
     setSelectedItems(new Set()); // Clear selections when toggling mode
   };
   
-  const handleItemSelection = (e: React.MouseEvent, resultId: number) => {
+  const handleItemSelection = (e: React.MouseEvent, resultId: string) => {
     e.stopPropagation(); // Prevent triggering the card click
     
     const newSelected = new Set(selectedItems);
@@ -253,7 +252,7 @@ export function ImageHistory({ onBack }: HistoryProps) {
   };
   
   // Handle bulk delete completion
-  const handleBulkDeleteComplete = async (deletedIds: number[]) => {
+  const handleBulkDeleteComplete = async (deletedIds: string[]) => {
     try {
       // Remove deleted items from current results
       setResults(prev => prev.filter(r => !deletedIds.includes(r.id)));
@@ -273,7 +272,7 @@ export function ImageHistory({ onBack }: HistoryProps) {
   };
   
   // Handle card click - either selection or details
-  const handleCardClick = (resultId: number) => {
+  const handleCardClick = (resultId: string) => {
     if (selectionMode) {
       // In selection mode, toggle selection
       const newSelected = new Set(selectedItems);
@@ -329,8 +328,6 @@ export function ImageHistory({ onBack }: HistoryProps) {
     // Calculate F1 Score for quick display
     const calculateQuickF1 = (pred: number, corr: number) => {
       const tp = Math.min(pred, corr);
-      const fp = Math.max(0, pred - corr);
-      const fn = Math.max(0, corr - pred);
       
       const precision = pred > 0 ? tp / pred : (corr === 0 ? 1 : 0);
       const recall = corr > 0 ? tp / corr : (pred === 0 ? 1 : 0);

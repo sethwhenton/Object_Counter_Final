@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent } from './ui/dialog';
 import { Button } from './ui/button';
 import { X, Loader2, Camera, CheckCircle, AlertCircle } from 'lucide-react';
 import api from '../services/api';
-import { ProcessedImage, ObjectCount } from './ResultsDashboard';
+import { ProcessedImage } from './ResultsDashboard';
 
 interface SimpleProcessingDialogProps {
   isOpen: boolean;
   onClose: () => void;
   imageFiles: File[];
-  prompt: string;
+  selectedObjectType: string;
   totalImages: number;
   onProcessingComplete: (results: ProcessedImage[]) => void;
   onProcessingError: (error: string) => void;
@@ -19,7 +19,7 @@ export function SimpleProcessingDialog({
   isOpen,
   onClose,
   imageFiles,
-  prompt,
+  selectedObjectType,
   totalImages,
   onProcessingComplete,
   onProcessingError
@@ -59,14 +59,18 @@ export function SimpleProcessingDialog({
         try {
           const result = await api.countAllObjects(
             imageFile,
-            prompt || 'Detect and count all objects in this image'
+            selectedObjectType,
+            `Detect and count ${selectedObjectType} objects in this image`
           );
 
           const processedImage: ProcessedImage = {
             id: Math.random().toString(36).substr(2, 9),
             file: imageFile,
             url: URL.createObjectURL(imageFile),
-            objects: result.objects as ObjectCount[],
+            objects: [{
+              type: result.object_type,
+              count: result.predicted_count
+            }],
             resultId: result.result_id,
             processingTime: result.processing_time,
             totalSegments: result.total_segments

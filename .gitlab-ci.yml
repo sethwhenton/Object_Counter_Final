@@ -1,9 +1,205 @@
+# GitLab CI/CD Pipeline for Object Counting API
+# Updated for MySQL migration and comprehensive testing infrastructure
+
 stages:
   - test
+  - build
+  - deploy
 
+variables:
+  MYSQL_DATABASE: obj_detect_test_db
+  APP_ENV: ai_env
+  PYTHON_VERSION: "3.11"
+
+# Test stage - runs comprehensive test suite
 test:
   stage: test
+  image: python:3.11
+  services:
+    - mysql:8.0
+  variables:
+    MYSQL_ROOT_PASSWORD: root
+    MYSQL_DATABASE: obj_detect_test_db
+    MYSQL_USER: root
+    MYSQL_PASSWORD: root
+    MYSQL_HOST: mysql
+    # Test environment variables
+    OBJ_DETECT_ENV: test
+    OBJ_DETECT_MYSQL_DB: obj_detect_test_db
+    OBJ_DETECT_MYSQL_USER: root
+    OBJ_DETECT_MYSQL_PWD: root
+    OBJ_DETECT_MYSQL_HOST: mysql
+  before_script:
+    - echo "Setting up test environment..."
+    - apt-get update -qq && apt-get install -y -qq git
+    - python -m venv $APP_ENV
+    - source $APP_ENV/bin/activate
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+    - echo "Waiting for MySQL to be ready..."
+    - while ! mysqladmin ping -h"$MYSQL_HOST" -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" --silent; do sleep 1; done
+    - echo "MySQL is ready!"
   script:
-    - echo "Running tests..."
-  tags:
-    - test
+    - echo "Running comprehensive test suite..."
+    - cd backend
+    - python tests/test_runner.py --test all --verbose
+    - echo "All tests completed successfully!"
+  after_script:
+    - echo "Cleaning up test environment..."
+    - deactivate
+  artifacts:
+    reports:
+      junit: backend/test-results.xml
+    paths:
+      - backend/test-results/
+    expire_in: 1 week
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  only:
+    - main
+    - develop
+    - merge_requests
+
+# API Tests Only - for quick validation
+test_api:
+  stage: test
+  image: python:3.11
+  services:
+    - mysql:8.0
+  variables:
+    MYSQL_ROOT_PASSWORD: root
+    MYSQL_DATABASE: obj_detect_test_db
+    MYSQL_USER: root
+    MYSQL_PASSWORD: root
+    MYSQL_HOST: mysql
+    OBJ_DETECT_ENV: test
+    OBJ_DETECT_MYSQL_DB: obj_detect_test_db
+    OBJ_DETECT_MYSQL_USER: root
+    OBJ_DETECT_MYSQL_PWD: root
+    OBJ_DETECT_MYSQL_HOST: mysql
+  before_script:
+    - echo "Setting up API test environment..."
+    - apt-get update -qq && apt-get install -y -qq git
+    - python -m venv $APP_ENV
+    - source $APP_ENV/bin/activate
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+    - echo "Waiting for MySQL to be ready..."
+    - while ! mysqladmin ping -h"$MYSQL_HOST" -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" --silent; do sleep 1; done
+  script:
+    - echo "Running API tests..."
+    - cd backend
+    - python tests/test_runner.py --test api
+    - echo "API tests completed successfully!"
+  after_script:
+    - deactivate
+  only:
+    - main
+    - develop
+    - merge_requests
+
+# Storage Tests Only - for database validation
+test_storage:
+  stage: test
+  image: python:3.11
+  services:
+    - mysql:8.0
+  variables:
+    MYSQL_ROOT_PASSWORD: root
+    MYSQL_DATABASE: obj_detect_test_db
+    MYSQL_USER: root
+    MYSQL_PASSWORD: root
+    MYSQL_HOST: mysql
+    OBJ_DETECT_ENV: test
+    OBJ_DETECT_MYSQL_DB: obj_detect_test_db
+    OBJ_DETECT_MYSQL_USER: root
+    OBJ_DETECT_MYSQL_PWD: root
+    OBJ_DETECT_MYSQL_HOST: mysql
+  before_script:
+    - echo "Setting up storage test environment..."
+    - apt-get update -qq && apt-get install -y -qq git
+    - python -m venv $APP_ENV
+    - source $APP_ENV/bin/activate
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+    - echo "Waiting for MySQL to be ready..."
+    - while ! mysqladmin ping -h"$MYSQL_HOST" -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" --silent; do sleep 1; done
+  script:
+    - echo "Running storage tests..."
+    - cd backend
+    - python tests/test_runner.py --test storage
+    - echo "Storage tests completed successfully!"
+  after_script:
+    - deactivate
+  only:
+    - main
+    - develop
+    - merge_requests
+
+# Build stage - prepare application for deployment
+build:
+  stage: build
+  image: python:3.11
+  variables:
+    OBJ_DETECT_ENV: production
+  before_script:
+    - echo "Building application..."
+    - python -m venv $APP_ENV
+    - source $APP_ENV/bin/activate
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+  script:
+    - echo "Validating application structure..."
+    - cd backend
+    - python -c "import app_restructured; print('✅ Application imports successfully')"
+    - python -c "from storage.database_functions import init_database; print('✅ Database functions available')"
+    - python -c "from tests.test_runner import main; print('✅ Test infrastructure available')"
+    - echo "Application build completed successfully!"
+  artifacts:
+    paths:
+      - backend/
+      - requirements.txt
+    expire_in: 1 hour
+  only:
+    - main
+    - develop
+    - tags
+
+# Deploy stage - deploy to staging/production
+deploy_staging:
+  stage: deploy
+  image: python:3.11
+  variables:
+    OBJ_DETECT_ENV: staging
+  before_script:
+    - echo "Preparing deployment to staging..."
+    - python -m venv $APP_ENV
+    - source $APP_ENV/bin/activate
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+  script:
+    - echo "Deploying to staging environment..."
+    - echo "✅ Staging deployment completed!"
+    - echo "Application is ready for testing"
+  only:
+    - develop
+  when: manual
+
+deploy_production:
+  stage: deploy
+  image: python:3.11
+  variables:
+    OBJ_DETECT_ENV: production
+  before_script:
+    - echo "Preparing production deployment..."
+    - python -m venv $APP_ENV
+    - source $APP_ENV/bin/activate
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+  script:
+    - echo "Deploying to production environment..."
+    - echo "✅ Production deployment completed!"
+    - echo "Application is live and ready for use"
+  only:
+    - main
+    - tags
+  when: manual

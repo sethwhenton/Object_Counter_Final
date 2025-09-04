@@ -29,13 +29,13 @@ import { F1ScoreDisplay } from './F1ScoreDisplay';
 interface ResultDetailsDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  resultId: number | null;
-  onDelete?: (resultId: number) => void;
-  onUpdate?: (resultId: number) => void;
+  resultId: string | null;
+  onDelete?: (resultId: string) => void;
+  onUpdate?: (resultId: string) => void;
 }
 
 interface DetailedResult {
-  id: number;
+  id: string;
   predicted_count: number;
   corrected_count: number | null;
   object_type: string;

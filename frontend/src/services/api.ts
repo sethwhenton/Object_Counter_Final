@@ -8,7 +8,7 @@ export interface ApiObjectCount {
 
 export interface ApiCountResponse {
   success: boolean;
-  result_id: number;
+  result_id: string;
   object_type: string;
   predicted_count: number;
   total_segments: number;
@@ -19,9 +19,20 @@ export interface ApiCountResponse {
 
 export interface ApiMultiObjectResponse {
   success: boolean;
-  result_id: number;
+  result_id: string;
   objects: ApiObjectCount[];
   total_objects: number;
+  total_segments: number;
+  processing_time: number;
+  image_path: string;
+  created_at: string;
+}
+
+export interface ApiSingleObjectResponse {
+  success: boolean;
+  result_id: string;
+  object_type: string;
+  predicted_count: number;
   total_segments: number;
   processing_time: number;
   image_path: string;
@@ -38,7 +49,7 @@ export interface ApiObjectType {
 
 export interface ApiCorrectionResponse {
   success: boolean;
-  result_id: number;
+  result_id: string;
   predicted_count: number;
   corrected_count: number;
   updated_at: string;
@@ -89,6 +100,20 @@ class ObjectCountingAPI {
   }
 
   /**
+   * Get object type names as a simple array for dropdown options
+   */
+  async getObjectTypeNames(): Promise<string[]> {
+    try {
+      const objectTypes = await this.getObjectTypes();
+      return objectTypes.map(obj => obj.name);
+    } catch (error) {
+      console.error('Failed to get object type names:', error);
+      // Return fallback options if API fails
+      return ['car', 'person', 'dog', 'cat', 'tree', 'building'];
+    }
+  }
+
+  /**
    * Upload image and get object count prediction
    * @param imageFile - The image file to upload
    * @param objectType - The type of object to count
@@ -121,14 +146,16 @@ class ObjectCountingAPI {
   }
 
   /**
-   * Upload image and get multi-object detection and counting
+   * Upload image and get object detection and counting for a specific object type
    * @param imageFile - The image file to upload
+   * @param objectType - The specific object type to detect and count
    * @param description - Optional description
    */
-  async countAllObjects(imageFile: File, description = ''): Promise<ApiMultiObjectResponse> {
+  async countAllObjects(imageFile: File, objectType: string, description = ''): Promise<ApiSingleObjectResponse> {
     try {
       const formData = new FormData();
       formData.append('image', imageFile);
+      formData.append('object_type', objectType);
       if (description) {
         formData.append('description', description);
       }
@@ -145,7 +172,7 @@ class ObjectCountingAPI {
 
       return await response.json();
     } catch (error) {
-      console.error('Multi-object detection failed:', error);
+      console.error('Object detection failed:', error);
       throw error;
     }
   }
@@ -155,7 +182,7 @@ class ObjectCountingAPI {
    * @param resultId - The ID of the result to correct
    * @param correctedCount - The corrected count
    */
-  async correctPrediction(resultId: number, correctedCount: number): Promise<ApiCorrectionResponse> {
+  async correctPrediction(resultId: string, correctedCount: number): Promise<ApiCorrectionResponse> {
     try {
       const response = await fetch(`${API_BASE_URL}/api/correct`, {
         method: 'PUT',
@@ -304,7 +331,7 @@ class ObjectCountingAPI {
   /**
    * Get detailed information for a specific result
    */
-  async getResultDetails(resultId: number) {
+  async getResultDetails(resultId: string) {
     try {
       const response = await fetch(`${API_BASE_URL}/api/results/${resultId}`);
       if (!response.ok) {
@@ -320,7 +347,7 @@ class ObjectCountingAPI {
   /**
    * Delete a result and its associated data
    */
-  async deleteResult(resultId: number) {
+  async deleteResult(resultId: string) {
     try {
       const response = await fetch(`${API_BASE_URL}/api/results/${resultId}`, {
         method: 'DELETE',
@@ -338,7 +365,7 @@ class ObjectCountingAPI {
   /**
    * Update feedback for a specific result
    */
-  async updateResultFeedback(resultId: number, correctedCount: number, objectType?: string) {
+  async updateResultFeedback(resultId: string, correctedCount: number, objectType?: string) {
     try {
       const response = await fetch(`${API_BASE_URL}/api/results/${resultId}/feedback`, {
         method: 'PUT',
@@ -364,7 +391,7 @@ class ObjectCountingAPI {
   /**
    * Delete multiple results in bulk
    */
-  async bulkDeleteResults(resultIds: number[]) {
+  async bulkDeleteResults(resultIds: string[]) {
     try {
       const response = await fetch(`${API_BASE_URL}/api/results/bulk-delete`, {
         method: 'DELETE',

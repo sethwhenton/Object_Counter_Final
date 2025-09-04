@@ -3,7 +3,7 @@ Performance Metrics Utilities for Object Counting AI
 Implements F1 Score, Precision, Recall, and other evaluation metrics
 """
 
-def calculate_f1_metrics(predicted_count, corrected_count):
+def calculate_f1_metrics(predicted_count, corrected_count) -> None:
     """
     Calculate F1 Score, Precision, and Recall for object counting tasks.
     
@@ -81,7 +81,7 @@ def calculate_f1_metrics(predicted_count, corrected_count):
         'explanation': explanation
     }
 
-def generate_performance_explanation(f1_score, precision, recall, predicted, corrected, tp, fp, fn):
+def generate_performance_explanation(f1_score, precision, recall, predicted, corrected, tp, fp, fn) -> None:
     """Generate human-readable explanation of the F1 score metrics"""
     
     if f1_score >= 95:
@@ -124,7 +124,7 @@ def generate_performance_explanation(f1_score, precision, recall, predicted, cor
     
     return f"{emoji} {level} (F1: {f1_score:.1f}%) - {insight} {balance_insight} [{breakdown}]"
 
-def calculate_legacy_accuracy(predicted_count, corrected_count):
+def calculate_legacy_accuracy(predicted_count, corrected_count) -> None:
     """
     Calculate legacy accuracy metric for backward compatibility.
     
@@ -136,7 +136,7 @@ def calculate_legacy_accuracy(predicted_count, corrected_count):
     else:
         return max(0, 100 - abs(predicted_count - corrected_count) / corrected_count * 100)
 
-def get_performance_badge_info(f1_score):
+def get_performance_badge_info(f1_score) -> None:
     """
     Get badge styling information based on F1 score.
     
@@ -179,7 +179,7 @@ def get_performance_badge_info(f1_score):
             'border_color': 'border-red-300'
         }
 
-def calculate_overall_f1_stats(results):
+def calculate_overall_f1_stats(results) -> None:
     """
     Calculate overall F1 statistics across multiple results.
     

@@ -1,58 +1,51 @@
-import os
-from datetime import timedelta
 
+from datetime import timedelta
+from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any, Union
+import os
 class Config:
     """Base configuration class"""
     
     # Flask settings
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
     
-    # Database settings
-    # For development, we'll use SQLite by default (easier setup)
-    # For production, switch to MySQL
-    DATABASE_TYPE = os.environ.get('DATABASE_TYPE', 'sqlite')
-    
-    if DATABASE_TYPE == 'mysql':
-        # MySQL configuration
-        MYSQL_HOST = os.environ.get('MYSQL_HOST', 'localhost')
-        MYSQL_PORT = os.environ.get('MYSQL_PORT', '3306')
-        MYSQL_USER = os.environ.get('MYSQL_USER', 'root')
-        MYSQL_PASSWORD = os.environ.get('MYSQL_PASSWORD', '')
-        MYSQL_DATABASE = os.environ.get('MYSQL_DATABASE', 'object_counting')
-        
-        SQLALCHEMY_DATABASE_URI = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}"
-    else:
-        # SQLite configuration (default for development)
-        SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///object_counting.db'
-    
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # MySQL Database settings - Primary configuration
+    OBJ_DETECT_MYSQL_USER = os.environ.get('OBJ_DETECT_MYSQL_USER', 'obj_detect_dev')
+    OBJ_DETECT_MYSQL_PWD = os.environ.get('OBJ_DETECT_MYSQL_PWD', 'obj_detect_dev_pwd')
+    OBJ_DETECT_MYSQL_HOST = os.environ.get('OBJ_DETECT_MYSQL_HOST', 'localhost')
+    OBJ_DETECT_MYSQL_DB = os.environ.get('OBJ_DETECT_MYSQL_DB', 'obj_detect_dev_db')
+    OBJ_DETECT_ENV = os.environ.get('OBJ_DETECT_ENV', 'development')
     
     # File upload settings
     UPLOAD_FOLDER = 'uploads'
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
-    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'}
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp'}
     
     # API settings
     API_TITLE = 'Object Counting API'
     API_VERSION = 'v1'
     
     @staticmethod
-    def init_app(app):
+    def init_app(app) -> None:
         """Initialize app with this configuration"""
         pass
 
 class DevelopmentConfig(Config):
     """Development configuration"""
     DEBUG = True
-    
+
 class ProductionConfig(Config):
     """Production configuration"""
     DEBUG = False
-    
+
 class TestingConfig(Config):
     """Testing configuration"""
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'  # In-memory database for tests
+    OBJ_DETECT_ENV = 'test'
+    OBJ_DETECT_MYSQL_USER = os.environ.get('OBJ_DETECT_MYSQL_USER', 'obj_detect_test')
+    OBJ_DETECT_MYSQL_PWD = os.environ.get('OBJ_DETECT_MYSQL_PWD', 'obj_detect_test_pwd')
+    OBJ_DETECT_MYSQL_HOST = os.environ.get('OBJ_DETECT_MYSQL_HOST', 'localhost')
+    OBJ_DETECT_MYSQL_DB = os.environ.get('OBJ_DETECT_MYSQL_DB', 'obj_detect_test_db')
 
 # Configuration dictionary
 config = {
@@ -62,10 +55,7 @@ config = {
     'default': DevelopmentConfig
 }
 
-def allowed_file(filename):
+def allowed_file(filename) -> None:
     """Check if uploaded file has allowed extension"""
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in Config.ALLOWED_EXTENSIONS
-
-
-

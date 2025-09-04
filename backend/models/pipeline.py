@@ -1,14 +1,14 @@
+
+from PIL import Image
+from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
+from transformers import AutoImageProcessor, AutoModelForImageClassification, pipeline
 import numpy as np
+import os
+import time
 import torch
 import torch.nn.functional as F
-from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
 import torchvision.transforms as tf
-from transformers import AutoImageProcessor, AutoModelForImageClassification, pipeline
-from PIL import Image
-import os
 import urllib.request
-import time
-
 # Import performance monitor for stage tracking
 try:
     from performance_monitor import get_performance_monitor

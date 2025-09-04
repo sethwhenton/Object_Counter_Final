@@ -23,14 +23,14 @@ interface BulkDeleteDialogProps {
   isOpen: boolean;
   onClose: () => void;
   selectedResults: Array<{
-    id: number;
+    id: string;
     object_type: string;
     predicted_count: number;
     corrected_count: number | null;
     image_path: string;
     created_at: string;
   }>;
-  onDeleteComplete: (deletedIds: number[]) => void;
+  onDeleteComplete: (deletedIds: string[]) => void;
 }
 
 interface DeletionProgress {
@@ -38,8 +38,8 @@ interface DeletionProgress {
   completed: number;
   failed: number;
   current?: string;
-  deletedIds: number[];
-  failures: Array<{ id: number; reason: string }>;
+  deletedIds: string[];
+  failures: Array<{ id: string; reason: string }>;
 }
 
 export function BulkDeleteDialog({ 

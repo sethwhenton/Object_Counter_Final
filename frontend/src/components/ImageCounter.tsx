@@ -1,11 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, X, Image as ImageIcon, AlertCircle, History, RefreshCw, Trash2, Zap, Cpu, Activity, BarChart3 } from 'lucide-react';
 import { Button } from './ui/button';
-import { Textarea } from './ui/textarea';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Alert, AlertDescription } from './ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { ProcessedImage } from './ResultsDashboard';
 import { ImageHistory } from './ImageHistory';
 import { SimpleProcessingDialog } from './SimpleProcessingDialog';
@@ -19,14 +19,15 @@ interface UploadedImage {
   url: string;
   elementCount?: number;
   isProcessing?: boolean;
-  resultId?: number;
+  resultId?: string;
   processingError?: string;
 }
 
 export function ImageCounter() {
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [processedImages, setProcessedImages] = useState<ProcessedImage[]>([]);
-  const [prompt, setPrompt] = useState('');
+  const [selectedObjectType, setSelectedObjectType] = useState<string>('');
+  const [objectTypes, setObjectTypes] = useState<string[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -50,7 +51,7 @@ export function ImageCounter() {
     canRetry: false
   });
 
-  // Initialize API connection
+  // Initialize API connection and fetch object types
   useEffect(() => {
     const initializeAPI = async () => {
       try {
@@ -62,6 +63,22 @@ export function ImageCounter() {
         
         if (healthCheck.status === 'healthy' && healthCheck.pipeline_available) {
           setApiStatus('healthy');
+          
+          // Fetch available object types
+          try {
+            const objectTypeNames = await api.getObjectTypeNames();
+            setObjectTypes(objectTypeNames);
+            // Set default selection to first object type
+            if (objectTypeNames.length > 0) {
+              setSelectedObjectType(objectTypeNames[0]);
+            }
+          } catch (error) {
+            console.error('Failed to fetch object types:', error);
+            // Use fallback object types
+            const fallbackTypes = ['car', 'person', 'dog', 'cat', 'tree', 'building'];
+            setObjectTypes(fallbackTypes);
+            setSelectedObjectType(fallbackTypes[0]);
+          }
         } else {
           setApiStatus('error');
           setApiError(healthCheck.message || 'AI pipeline not available');
@@ -158,10 +175,11 @@ export function ImageCounter() {
       
       const result = await api.countAllObjects(
         image.file,
-        prompt || 'Detect and count all objects in this image'
+        selectedObjectType,
+        `Detect and count ${selectedObjectType} objects in this image`
       );
       
-      const totalCount = result.objects ? result.objects.reduce((sum: number, obj: any) => sum + obj.count, 0) : 0;
+      const totalCount = result.predicted_count || 0;
       
       // Update image with results
       setImages(prev => prev.map(img => 
@@ -181,7 +199,10 @@ export function ImageCounter() {
         id: image.id,
         file: image.file,
         url: image.url,
-        objects: result.objects || [],
+        objects: [{
+          type: result.object_type,
+          count: result.predicted_count
+        }],
         resultId: result.result_id,
         processingTime: result.processing_time,
         totalSegments: result.total_segments
@@ -217,6 +238,11 @@ export function ImageCounter() {
   const processImages = () => {
     if (images.length === 0 || apiStatus !== 'healthy') {
       setApiError('Please upload images to analyze');
+      return;
+    }
+    
+    if (!selectedObjectType) {
+      setApiError('Please select an object type to detect');
       return;
     }
     
@@ -536,22 +562,28 @@ export function ImageCounter() {
         </Card>
       )}
 
-      {/* Analysis Instructions */}
+      {/* Object Type Selection */}
       <Card>
         <CardContent className="p-6 space-y-4">
           <div className="space-y-2">
-            <label htmlFor="prompt">Analysis Instructions (Optional)</label>
-            <Textarea
-              id="prompt"
-              placeholder="Provide additional context for object detection and counting..."
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              rows={3}
-            />
+            <label htmlFor="object-type">Select Object Type to Detect</label>
+            <Select value={selectedObjectType} onValueChange={setSelectedObjectType}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Choose an object type to detect and count" />
+              </SelectTrigger>
+              <SelectContent>
+                {objectTypes.map((objectType) => (
+                  <SelectItem key={objectType} value={objectType}>
+                    <span className="capitalize">{objectType}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="text-xs text-muted-foreground">
-              The AI will automatically detect and count all objects in your images. You can provide specific instructions here if needed.
+              The AI will detect and count only the selected object type in your images. This makes processing much faster and more accurate.
             </p>
           </div>
+          
         </CardContent>
       </Card>
 
@@ -690,7 +722,7 @@ export function ImageCounter() {
         onClose={() => setShowProcessingDialog(false)}
         totalImages={images.length}
         imageFiles={images.map(img => img.file)}
-        prompt={prompt}
+        selectedObjectType={selectedObjectType}
         onProcessingComplete={handleProcessingComplete}
         onProcessingError={handleProcessingError}
       />

@@ -19,7 +19,7 @@ export interface ProcessedImage {
   file: File;
   url: string;
   objects: ObjectCount[];
-  resultId?: number;
+  resultId?: string;
   processingTime?: number;
   totalSegments?: number;
 }
