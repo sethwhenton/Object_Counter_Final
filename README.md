@@ -122,7 +122,7 @@ POST /test-pipeline
 ├── start_frontend.bat      # Frontend startup script (Windows)
 ├── requirements.txt        # Main Python dependencies
 ├── .gitignore             # Git ignore rules
-└── SETUP_AND_RUN.md       # Detailed setup guide
+└── docs/SETUP_AND_RUN.md  # Detailed setup guide
 ```
 
 ## 🔧 Development Status
@@ -188,6 +188,6 @@ Just run the batch files or follow the manual setup instructions and start count
 
 ## 📚 Additional Documentation
 
-- `SETUP_AND_RUN.md` - Detailed setup and troubleshooting guide
-- `backend/API_DOCUMENTATION.md` - Complete API documentation
+- `docs/SETUP_AND_RUN.md` - Detailed setup and troubleshooting guide
+- `docs/API_DOCUMENTATION.md` - Complete API documentation
 - `frontend/README.md` - Frontend-specific documentation
