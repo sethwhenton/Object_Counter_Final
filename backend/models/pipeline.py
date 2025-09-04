@@ -31,6 +31,8 @@ class ObjectCountingPipeline:
         
         # Configuration
         self.TOP_N = 10  # Number of top segments to process
+        self.CONFIDENCE_THRESHOLD = 0.7  # Default confidence threshold for filtering
+        self.MIN_SEGMENTS_FOR_QUALITY = 5  # Minimum segments for quality assessment
         
         # GPU setup with memory management
         self._setup_device()
@@ -198,9 +200,10 @@ class ObjectCountingPipeline:
             segments (list): List of image segments
             
         Returns:
-            list: Predicted class names
+            tuple: (predicted_classes, confidence_scores)
         """
         predicted_classes = []
+        confidence_scores = []
         
         for segment in segments:
             inputs = self.image_processor(images=segment, return_tensors="pt")
@@ -212,45 +215,181 @@ class ObjectCountingPipeline:
             with torch.no_grad():  # Optimize GPU memory
                 outputs = self.class_model(**inputs)
                 logits = outputs.logits
-                predicted_class_idx = logits.argmax(-1).item()
-                predicted_class = self.class_model.config.id2label[predicted_class_idx]
+                
+                # Apply softmax to get probabilities
+                probabilities = F.softmax(logits, dim=-1)
+                max_prob, predicted_class_idx = torch.max(probabilities, dim=-1)
+                
+                predicted_class = self.class_model.config.id2label[predicted_class_idx.item()]
+                confidence = max_prob.item()
+                
                 predicted_classes.append(predicted_class)
+                confidence_scores.append(confidence)
         
         # Clean up GPU memory after classification
         if self.device == "cuda":
             torch.cuda.empty_cache()
         
-        return predicted_classes
+        return predicted_classes, confidence_scores
     
-    def map_to_categories(self, predicted_classes):
+    def map_to_categories(self, predicted_classes, classification_confidences):
         """
         Step 3: Map ResNet predictions to predefined categories using zero-shot classification
         
         Args:
             predicted_classes (list): ResNet predicted class names
+            classification_confidences (list): Confidence scores from classification
             
         Returns:
-            list: Mapped category labels
+            tuple: (mapped_labels, final_confidences)
         """
         labels = []
+        final_confidences = []
         
-        for predicted_class in predicted_classes:
+        for predicted_class, class_confidence in zip(predicted_classes, classification_confidences):
             result = self.label_classifier(predicted_class, candidate_labels=self.candidate_labels)
             label = result['labels'][0]  # Get the most confident label
+            mapping_confidence = result['scores'][0]  # Get confidence of mapping
+            
+            # Combine classification and mapping confidences
+            combined_confidence = (class_confidence + mapping_confidence) / 2
+            
             labels.append(label)
+            final_confidences.append(combined_confidence)
         
-        return labels
+        return labels, final_confidences
     
-    def count_objects(self, image_file, target_object_type):
+    def apply_confidence_threshold(self, segments, labels, confidences, threshold=None):
         """
-        Main pipeline: Count objects of specified type in image
+        Filter segments by confidence threshold
+        
+        Args:
+            segments (list): List of image segments
+            labels (list): Predicted labels
+            confidences (list): Confidence scores
+            threshold (float): Confidence threshold (uses default if None)
+            
+        Returns:
+            tuple: (filtered_segments, filtered_labels, filtered_confidences)
+        """
+        if threshold is None:
+            threshold = self.CONFIDENCE_THRESHOLD
+        
+        filtered_segments = []
+        filtered_labels = []
+        filtered_confidences = []
+        
+        for segment, label, confidence in zip(segments, labels, confidences):
+            if confidence > threshold:
+                filtered_segments.append(segment)
+                filtered_labels.append(label)
+                filtered_confidences.append(confidence)
+        
+        return filtered_segments, filtered_labels, filtered_confidences
+    
+    def aggregate_confidences(self, confidences):
+        """
+        Calculate aggregated confidence metrics
+        
+        Args:
+            confidences (list): List of confidence scores
+            
+        Returns:
+            dict: Aggregated confidence metrics
+        """
+        if not confidences:
+            return {
+                "average_confidence": 0.0,
+                "min_confidence": 0.0,
+                "max_confidence": 0.0,
+                "median_confidence": 0.0,
+                "confidence_std": 0.0
+            }
+        
+        import statistics
+        
+        return {
+            "average_confidence": sum(confidences) / len(confidences),
+            "min_confidence": min(confidences),
+            "max_confidence": max(confidences),
+            "median_confidence": statistics.median(confidences),
+            "confidence_std": statistics.stdev(confidences) if len(confidences) > 1 else 0.0
+        }
+    
+    def generate_quality_flags(self, avg_confidence, total_segments, filtered_segments):
+        """
+        Generate quality assessment flags
+        
+        Args:
+            avg_confidence (float): Average confidence score
+            total_segments (int): Total number of segments processed
+            filtered_segments (int): Number of segments after confidence filtering
+            
+        Returns:
+            dict: Quality assessment flags and scores
+        """
+        # Calculate quality metrics
+        confidence_quality = "high" if avg_confidence > 0.8 else "medium" if avg_confidence > 0.6 else "low"
+        segment_quality = "sufficient" if total_segments >= self.MIN_SEGMENTS_FOR_QUALITY else "insufficient"
+        filtering_ratio = filtered_segments / total_segments if total_segments > 0 else 0
+        filtering_quality = "good" if filtering_ratio > 0.7 else "moderate" if filtering_ratio > 0.4 else "poor"
+        
+        # Overall quality score (0-1)
+        quality_score = (avg_confidence * 0.4 + 
+                        (1 if segment_quality == "sufficient" else 0.5) * 0.3 + 
+                        filtering_ratio * 0.3)
+        
+        return {
+            "high_confidence": avg_confidence > 0.8,
+            "sufficient_segments": total_segments >= self.MIN_SEGMENTS_FOR_QUALITY,
+            "good_filtering": filtering_ratio > 0.7,
+            "confidence_quality": confidence_quality,
+            "segment_quality": segment_quality,
+            "filtering_quality": filtering_quality,
+            "quality_score": quality_score,
+            "filtering_ratio": filtering_ratio,
+            "recommendations": self._get_quality_recommendations(confidence_quality, segment_quality, filtering_quality)
+        }
+    
+    def _get_quality_recommendations(self, confidence_quality, segment_quality, filtering_quality):
+        """
+        Generate recommendations based on quality assessment
+        
+        Args:
+            confidence_quality (str): Confidence quality level
+            segment_quality (str): Segment quality level
+            filtering_quality (str): Filtering quality level
+            
+        Returns:
+            list: List of recommendations
+        """
+        recommendations = []
+        
+        if confidence_quality == "low":
+            recommendations.append("Consider using higher resolution images or different lighting conditions")
+        
+        if segment_quality == "insufficient":
+            recommendations.append("Image may have too few distinct objects for reliable counting")
+        
+        if filtering_quality == "poor":
+            recommendations.append("Many segments were filtered out - consider adjusting confidence threshold")
+        
+        if not recommendations:
+            recommendations.append("Quality assessment indicates good results")
+        
+        return recommendations
+    
+    def count_objects(self, image_file, target_object_type, confidence_threshold=None):
+        """
+        Main pipeline: Count objects of specified type in image with enhanced confidence processing
         
         Args:
             image_file: Image file from Flask request
             target_object_type (str): Type of object to count
+            confidence_threshold (float): Optional confidence threshold override
             
         Returns:
-            dict: Results including count and processing info
+            dict: Results including count, confidence metrics, and quality assessment
         """
         start_time = time.time()
         
@@ -259,34 +398,55 @@ class ObjectCountingPipeline:
         
         # Step 1: Segment image
         segmentation_map, segments = self.segment_image(image)
+        total_segments = len(segments)
         
-        # Step 2: Classify segments
-        predicted_classes = self.classify_segments(segments)
+        # Step 2: Classify segments with confidence scores
+        predicted_classes, classification_confidences = self.classify_segments(segments)
         
-        # Step 3: Map to categories
-        final_labels = self.map_to_categories(predicted_classes)
+        # Step 3: Map to categories with combined confidence scores
+        final_labels, final_confidences = self.map_to_categories(predicted_classes, classification_confidences)
         
-        # Count target objects
-        target_count = final_labels.count(target_object_type)
+        # Step 4: Apply confidence threshold filtering
+        filtered_segments, filtered_labels, filtered_confidences = self.apply_confidence_threshold(
+            segments, final_labels, final_confidences, confidence_threshold
+        )
+        
+        # Step 5: Count target objects (using filtered results)
+        target_count = filtered_labels.count(target_object_type)
+        
+        # Step 6: Calculate confidence aggregation
+        confidence_metrics = self.aggregate_confidences(filtered_confidences)
+        
+        # Step 7: Generate quality assessment
+        quality_flags = self.generate_quality_flags(
+            confidence_metrics["average_confidence"], 
+            total_segments, 
+            len(filtered_segments)
+        )
         
         processing_time = time.time() - start_time
         
         return {
             "count": target_count,
-            "total_segments": len(segments),
-            "all_detected_objects": final_labels,
-            "processing_time": round(processing_time, 2)
+            "total_segments": total_segments,
+            "filtered_segments": len(filtered_segments),
+            "all_detected_objects": filtered_labels,  # Use filtered results
+            "processing_time": round(processing_time, 2),
+            "confidence_metrics": confidence_metrics,
+            "quality_assessment": quality_flags,
+            "confidence_threshold_used": confidence_threshold or self.CONFIDENCE_THRESHOLD
         }
     
-    def count_all_objects(self, image_file):
+    def count_all_objects(self, image_file, confidence_threshold=None):
         """
-        Main pipeline: Detect and count ALL objects in image
+        Main pipeline: Detect and count ALL objects in image with enhanced confidence processing
         
         Args:
             image_file: Image file from Flask request
+            confidence_threshold (float): Optional confidence threshold override
             
         Returns:
-            dict: Results including counts for all detected object types
+            dict: Results including counts for all detected object types with confidence metrics
         """
         start_time = time.time()
         
@@ -307,23 +467,31 @@ class ObjectCountingPipeline:
         if monitor and monitor.is_monitoring:
             monitor.update_stage("segmenting")
         segmentation_map, segments = self.segment_image(image)
+        total_segments = len(segments)
         
-        # Step 2: Classify segments
+        # Step 2: Classify segments with confidence scores
         if monitor and monitor.is_monitoring:
             monitor.update_stage("classifying")
-        predicted_classes = self.classify_segments(segments)
+        predicted_classes, classification_confidences = self.classify_segments(segments)
         
-        # Step 3: Map to categories
+        # Step 3: Map to categories with combined confidence scores
         if monitor and monitor.is_monitoring:
             monitor.update_stage("mapping_categories")
-        final_labels = self.map_to_categories(predicted_classes)
+        final_labels, final_confidences = self.map_to_categories(predicted_classes, classification_confidences)
         
-        # Count all object types
+        # Step 4: Apply confidence threshold filtering
+        if monitor and monitor.is_monitoring:
+            monitor.update_stage("filtering_confidence")
+        filtered_segments, filtered_labels, filtered_confidences = self.apply_confidence_threshold(
+            segments, final_labels, final_confidences, confidence_threshold
+        )
+        
+        # Count all object types (using filtered results)
         if monitor and monitor.is_monitoring:
             monitor.update_stage("counting_objects")
         
         object_counts = {}
-        for label in final_labels:
+        for label in filtered_labels:
             object_counts[label] = object_counts.get(label, 0) + 1
         
         # Convert to list format for frontend
@@ -335,6 +503,16 @@ class ObjectCountingPipeline:
         # Calculate total objects
         total_objects = sum(object_counts.values())
         
+        # Step 5: Calculate confidence aggregation
+        confidence_metrics = self.aggregate_confidences(filtered_confidences)
+        
+        # Step 6: Generate quality assessment
+        quality_flags = self.generate_quality_flags(
+            confidence_metrics["average_confidence"], 
+            total_segments, 
+            len(filtered_segments)
+        )
+        
         # Final stage
         if monitor and monitor.is_monitoring:
             monitor.update_stage("finalizing")
@@ -344,9 +522,13 @@ class ObjectCountingPipeline:
         return {
             "objects": objects_list,
             "total_objects": total_objects,
-            "total_segments": len(segments),
-            "all_detected_objects": final_labels,
-            "processing_time": round(processing_time, 2)
+            "total_segments": total_segments,
+            "filtered_segments": len(filtered_segments),
+            "all_detected_objects": filtered_labels,  # Use filtered results
+            "processing_time": round(processing_time, 2),
+            "confidence_metrics": confidence_metrics,
+            "quality_assessment": quality_flags,
+            "confidence_threshold_used": confidence_threshold or self.CONFIDENCE_THRESHOLD
         }
 
 

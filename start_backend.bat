@@ -2,6 +2,6 @@
 echo Starting AI Object Counting Backend...
 cd backend
 call venv\Scripts\activate
-python app.py
+python app_restructured.py
 pause
 

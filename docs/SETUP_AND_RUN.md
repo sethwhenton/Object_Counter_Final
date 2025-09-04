@@ -46,7 +46,7 @@ Your backend is already set up and ready to run! Here's what was installed:
 ```bash
 cd backend
 .\venv\Scripts\Activate.ps1
-python app.py
+python app_restructured.py
 ```
 
 #### Start Frontend (in a new terminal):

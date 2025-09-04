@@ -130,7 +130,7 @@ def main():
         print("   backend\\venv\\Scripts\\activate")
     else:
         print("   source backend/venv/bin/activate")
-    print("2. Start the backend: python backend/app.py")
+    print("2. Start the backend: python backend/app_restructured.py")
     print("3. Start the frontend: cd frontend && npm run dev")
     print("\nTIP: For MySQL issues, run: python backend/setup_mysql.py")
 

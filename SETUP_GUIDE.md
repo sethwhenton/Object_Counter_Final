@@ -123,7 +123,7 @@ python backend/test_mysql_connection_fixed.py
 activate_venv.bat
 
 # Start backend
-python backend/app.py
+python backend/app_restructured.py
 ```
 
 ### **Frontend (React)**
@@ -203,7 +203,7 @@ pytest backend/tests/
 │   │   ├── inputs.py       # Input model
 │   │   ├── object_types.py # Object type model
 │   │   └── outputs.py      # Output model
-│   ├── app.py              # Main Flask application
+│   ├── app_restructured.py # Main Flask application
 │   ├── config.py           # Configuration
 │   └── requirements.txt    # Python dependencies
 ├── frontend/               # React frontend
@@ -217,7 +217,7 @@ pytest backend/tests/
 
 1. **Activate virtual environment:** `activate_venv.bat`
 2. **Start MySQL service:** `python backend/check_mysql_service.py`
-3. **Start backend:** `python backend/app.py`
+3. **Start backend:** `python backend/app_restructured.py`
 4. **Start frontend:** `cd frontend && npm run dev`
 5. **Test changes:** `python backend/test_mysql_connection_fixed.py`
 

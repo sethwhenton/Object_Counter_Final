@@ -204,6 +204,13 @@ class TestPipelineResource(Resource):
                 'required': False,
                 'default': 'car',
                 'description': 'Object type to count'
+            },
+            {
+                'name': 'confidence_threshold',
+                'in': 'formData',
+                'type': 'number',
+                'required': False,
+                'description': 'Confidence threshold for filtering segments (0.0-1.0)'
             }
         ],
         'responses': {
@@ -216,7 +223,29 @@ class TestPipelineResource(Resource):
                         'object_type': {'type': 'string'},
                         'predicted_count': {'type': 'integer'},
                         'total_segments': {'type': 'integer'},
-                        'processing_time': {'type': 'number'}
+                        'filtered_segments': {'type': 'integer'},
+                        'processing_time': {'type': 'number'},
+                        'confidence_metrics': {
+                            'type': 'object',
+                            'properties': {
+                                'average_confidence': {'type': 'number'},
+                                'min_confidence': {'type': 'number'},
+                                'max_confidence': {'type': 'number'},
+                                'median_confidence': {'type': 'number'},
+                                'confidence_std': {'type': 'number'}
+                            }
+                        },
+                        'quality_assessment': {
+                            'type': 'object',
+                            'properties': {
+                                'high_confidence': {'type': 'boolean'},
+                                'sufficient_segments': {'type': 'boolean'},
+                                'good_filtering': {'type': 'boolean'},
+                                'quality_score': {'type': 'number'},
+                                'recommendations': {'type': 'array', 'items': {'type': 'string'}}
+                            }
+                        },
+                        'confidence_threshold_used': {'type': 'number'}
                     }
                 }
             },
@@ -247,15 +276,27 @@ class TestPipelineResource(Resource):
             # Get object type to count (default to 'car' for testing)
             object_type = request.form.get('object_type', 'car')
             
+            # Get confidence threshold (optional)
+            confidence_threshold = request.form.get('confidence_threshold')
+            if confidence_threshold:
+                try:
+                    confidence_threshold = float(confidence_threshold)
+                except ValueError:
+                    confidence_threshold = None
+            
             # Process the image
-            result = pipeline.count_objects(image_file, object_type)
+            result = pipeline.count_objects(image_file, object_type, confidence_threshold)
             
             return {
                 "success": True,
                 "object_type": object_type,
                 "predicted_count": result["count"],
                 "total_segments": result["total_segments"],
-                "processing_time": result["processing_time"]
+                "filtered_segments": result["filtered_segments"],
+                "processing_time": result["processing_time"],
+                "confidence_metrics": result["confidence_metrics"],
+                "quality_assessment": result["quality_assessment"],
+                "confidence_threshold_used": result["confidence_threshold_used"]
             }, 200
             
         except Exception as e:
@@ -287,6 +328,13 @@ class CountObjectsResource(Resource):
                 'type': 'string',
                 'required': False,
                 'description': 'Optional description'
+            },
+            {
+                'name': 'confidence_threshold',
+                'in': 'formData',
+                'type': 'number',
+                'required': False,
+                'description': 'Confidence threshold for filtering segments (0.0-1.0)'
             }
         ],
         'responses': {
@@ -333,6 +381,14 @@ class CountObjectsResource(Resource):
             object_type_name = request.form['object_type']
             description = request.form.get('description', '')
             
+            # Get confidence threshold (optional)
+            confidence_threshold = request.form.get('confidence_threshold')
+            if confidence_threshold:
+                try:
+                    confidence_threshold = float(confidence_threshold)
+                except ValueError:
+                    confidence_threshold = None
+            
             if image_file.filename == '':
                 return {"error": "No image file selected"}, 400
             
@@ -362,7 +418,11 @@ class CountObjectsResource(Resource):
             
             # Process image with AI pipeline
             image_file.seek(0)  # Reset file pointer for pipeline processing
-            result = pipeline.count_objects(image_file, object_type_name)
+            result = pipeline.count_objects(image_file, object_type_name, confidence_threshold)
+            
+            # Extract confidence metrics for database storage
+            avg_confidence = result["confidence_metrics"]["average_confidence"]
+            quality_score = result["quality_assessment"]["quality_score"]
             
             # Save result to MySQL database (store relative path)
             output_record = save_prediction_result(
@@ -370,7 +430,7 @@ class CountObjectsResource(Resource):
                 object_type_name=object_type_name,
                 predicted_count=result["count"],
                 description=description,
-                pred_confidence=0.85  # Default confidence, can be enhanced later
+                pred_confidence=avg_confidence  # Use actual average confidence
             )
             
             return {
@@ -379,9 +439,13 @@ class CountObjectsResource(Resource):
                 "object_type": object_type_name,
                 "predicted_count": result["count"],
                 "total_segments": result["total_segments"],
+                "filtered_segments": result["filtered_segments"],
                 "processing_time": result["processing_time"],
                 "image_path": f"uploads/{unique_filename}",  # Return path for frontend use
-                "created_at": output_record.created_at.isoformat()
+                "created_at": output_record.created_at.isoformat(),
+                "confidence_metrics": result["confidence_metrics"],
+                "quality_assessment": result["quality_assessment"],
+                "confidence_threshold_used": result["confidence_threshold_used"]
             }, 200
             
         except Exception as e:
@@ -473,6 +537,14 @@ class CountAllObjectsResource(Resource):
             object_type = request.form.get('object_type', '')
             description = request.form.get('description', '')
             
+            # Get confidence threshold (optional)
+            confidence_threshold = request.form.get('confidence_threshold')
+            if confidence_threshold:
+                try:
+                    confidence_threshold = float(confidence_threshold)
+                except ValueError:
+                    confidence_threshold = None
+            
             if image_file.filename == '':
                 return {"error": "No image file selected"}, 400
             
@@ -499,7 +571,7 @@ class CountAllObjectsResource(Resource):
             
             # Process image for the specified object type only
             try:
-                result = pipeline.count_objects(image_file, object_type)
+                result = pipeline.count_objects(image_file, object_type, confidence_threshold)
                 
                 detected_objects = [{
                     "type": object_type,
@@ -507,7 +579,10 @@ class CountAllObjectsResource(Resource):
                 }]
                 total_objects = result["count"]
                 total_segments = result["total_segments"]
+                filtered_segments = result["filtered_segments"]
                 processing_time = result["processing_time"]
+                confidence_metrics = result["confidence_metrics"]
+                quality_assessment = result["quality_assessment"]
                 
                 print(f"✅ Detected {result['count']} {object_type} objects in {result['processing_time']:.2f}s")
                 
@@ -521,7 +596,7 @@ class CountAllObjectsResource(Resource):
                 object_type_name=object_type,
                 predicted_count=total_objects,
                 description=description or f"Single object detection: {object_type}",
-                pred_confidence=0.85
+                pred_confidence=confidence_metrics["average_confidence"]
             )
             
             return {
@@ -530,9 +605,13 @@ class CountAllObjectsResource(Resource):
                 "object_type": object_type,
                 "predicted_count": total_objects,
                 "total_segments": total_segments,
+                "filtered_segments": filtered_segments,
                 "processing_time": processing_time,
                 "image_path": f"uploads/{unique_filename}",
-                "created_at": output_record.created_at.isoformat()
+                "created_at": output_record.created_at.isoformat(),
+                "confidence_metrics": confidence_metrics,
+                "quality_assessment": quality_assessment,
+                "confidence_threshold_used": result["confidence_threshold_used"]
             }, 200
             
         except Exception as e:

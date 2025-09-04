@@ -22,7 +22,7 @@ activate_venv.bat
 python test_setup_complete.py
 
 # Start the backend
-python backend/app.py
+python backend/app_restructured.py
 ```
 
 #### **Option 2: Direct Commands**
@@ -34,7 +34,7 @@ python test_setup_complete.py
 python backend/test_mysql_connection_fixed.py
 
 # Start backend
-python backend/app.py
+python backend/app_restructured.py
 ```
 
 ### 📋 **Available Scripts:**
@@ -58,7 +58,7 @@ python backend/app.py
 1. **Start Development:**
    ```bash
    activate_venv.bat
-   python backend/app.py
+   python backend/app_restructured.py
    ```
 
 2. **Test API Endpoints:**
@@ -83,7 +83,7 @@ python backend/app.py
 │   │   ├── inputs.py           # Input model
 │   │   ├── object_types.py     # Object type model
 │   │   └── outputs.py          # Output model
-│   ├── app.py                  # Main Flask application
+│   ├── app_restructured.py     # Main Flask application
 │   └── config.py               # Configuration
 ├── frontend/                   # React frontend
 ├── requirements.txt            # Python dependencies
@@ -96,7 +96,7 @@ python backend/app.py
 
 1. **Activate Environment:** `activate_venv.bat`
 2. **Test Setup:** `python test_setup_complete.py`
-3. **Start Backend:** `python backend/app.py`
+3. **Start Backend:** `python backend/app_restructured.py`
 4. **Start Frontend:** `cd frontend && npm run dev`
 5. **Test Changes:** `python backend/test_mysql_connection_fixed.py`
 
